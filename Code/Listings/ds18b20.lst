@@ -1,0 +1,417 @@
+C51 COMPILER V9.60.0.0   DS18B20                                                           06/24/2024 12:07:09 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE DS18B20
+OBJECT MODULE PLACED IN .\Objects\ds18b20.obj
+COMPILER INVOKED BY: D:\Keil5\C51\BIN\C51.EXE ds18b20.c LARGE OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listin
+                    -gs\ds18b20.lst) OBJECT(.\Objects\ds18b20.obj)
+
+line level    source
+
+   1          #include <INTRINS.H>
+   2          #include "ds18b20.h"
+   3          #include <reg52.h>
+   4          sbit DS18B20_PORT=P3^7;
+   5          sbit DS18B21_PORT=P3^6;
+   6           
+   7          // 延时n毫秒
+   8          void delay_ms(unsigned int n)
+   9          {
+  10   1          unsigned int i=0,j=0;
+  11   1          for(i=0;i<n;i++)
+  12   1              for(j=0;j<123;j++);
+  13   1      }
+  14          
+  15          
+  16          // 延时10*n微秒
+  17          void delay_10us(unsigned int n)
+  18          {
+  19   1          while(n--);
+  20   1      }
+  21          
+  22          
+  23          /**
+  24          * @brief  DS18B20初始化
+  25          */
+  26          void ds18b20_reset(void){
+  27   1              // 拉低DQ
+  28   1              DS18B20_PORT=0; 
+  29   1              // 持续750us
+  30   1              delay_10us(75);
+  31   1              // 释放DQ
+  32   1              DS18B20_PORT=1;
+  33   1              // 等待20us
+  34   1              delay_10us(2);
+  35   1      }
+  36          /**
+  37          * @brief DS18B20响应信号，用来判断DS18B20是否存在
+  38          * @return 0:成功 1:失败
+  39          */
+  40          unsigned char ds18b20_ack(void){
+  41   1          unsigned char timeout = 0;
+  42   1          // 读取响应信号，60us左右的低电平信号
+  43   1          while(DS18B20_PORT && timeout <20){
+  44   2              timeout ++;
+  45   2              delay_10us(1);
+  46   2          }
+  47   1          if(timeout >= 20){
+  48   2              // 超时了
+  49   2              return 1;
+  50   2          }else{
+  51   2              timeout = 0;
+  52   2          }
+  53   1          // 释放引脚，引脚会被拉高，240us左右的高电平信号
+  54   1                      while((!DS18B20_PORT)&&timeout<20)      //等待DQ为高电平
+C51 COMPILER V9.60.0.0   DS18B20                                                           06/24/2024 12:07:09 PAGE 2   
+
+  55   1                      {
+  56   2                              timeout++;
+  57   2                              delay_10us(1);
+  58   2                      }
+  59   1          if(timeout >= 20){
+  60   2              return 1;
+  61   2          }
+  62   1          return 0;
+  63   1      }
+  64          /**
+  65          * @brief DS18B20初始化
+  66          * @return 0:成功 1:失败
+  67          */
+  68          unsigned char ds18b20_init(void){
+  69   1          ds18b20_reset();
+  70   1          return ds18b20_ack();
+  71   1      }
+  72          /**
+  73          * @brief DS18B20写一个字节
+  74          * @return 写字节
+  75          */
+  76          void ds18b20_write_byte(unsigned char dat){
+  77   1              unsigned char i=0;
+  78   1              unsigned char temp=0;
+  79   1      
+  80   1              for(i=0;i<8;i++)//循环8次，每次写一位，且先写低位再写高位
+  81   1              {
+  82   2                      temp=dat&0x01;//选择低位准备写入
+  83   2                      dat>>=1;//将次高位移到低位
+  84   2                      if(temp)
+  85   2                      {
+  86   3                              DS18B20_PORT=0;
+  87   3                              _nop_();_nop_();
+  88   3                              DS18B20_PORT=1; 
+  89   3                              delay_10us(6);
+  90   3                      }
+  91   2                      else
+  92   2                      {
+  93   3                              DS18B20_PORT=0;
+  94   3                              delay_10us(6);
+  95   3                              DS18B20_PORT=1;
+  96   3                              _nop_();_nop_();        
+  97   3                      }       
+  98   2              }       
+  99   1      }
+ 100          /**
+ 101          * @brief DS18B20读取一个bit
+ 102          * @return 读取到的bit
+ 103          */
+ 104          unsigned char ds18b20_read_bit(void){
+ 105   1              unsigned char dat=0;
+ 106   1              
+ 107   1              DS18B20_PORT=0;
+ 108   1              _nop_();_nop_();
+ 109   1              DS18B20_PORT=1; 
+ 110   1              _nop_();_nop_(); //该段时间不能过长，必须在15us内读取数据
+ 111   1              if(DS18B20_PORT)dat=1;  //如果总线上为1则数据dat为1，否则为0
+ 112   1              else dat=0;
+ 113   1              delay_10us(5);
+ 114   1              return dat;
+ 115   1      }
+ 116          /**
+C51 COMPILER V9.60.0.0   DS18B20                                                           06/24/2024 12:07:09 PAGE 3   
+
+ 117          * @brief DS18B20读取一个字节
+ 118          * @return 读取到的字节
+ 119          */
+ 120          unsigned char ds18b20_read_byte(void){
+ 121   1              unsigned char i=0;
+ 122   1              unsigned char dat=0;
+ 123   1              unsigned char temp=0;
+ 124   1      
+ 125   1              for(i=0;i<8;i++)//循环8次，每次读取一位，且先读低位再读高位
+ 126   1              {
+ 127   2                      temp=ds18b20_read_bit();
+ 128   2                      dat=(temp<<7)|(dat>>1);
+ 129   2              }
+ 130   1              return dat;     
+ 131   1      }
+ 132          /**
+ 133          * @brief DS18B20开始转换
+ 134          */
+ 135          void ds18b20_start(void){
+ 136   1          ds18b20_reset();
+ 137   1          ds18b20_ack();
+ 138   1          ds18b20_write_byte(0xcc);
+ 139   1          ds18b20_write_byte(0x44);
+ 140   1      }
+ 141          /**
+ 142          * @brief DS18B20读取温度
+ 143          * @return 温度值
+ 144          */
+ 145          float ds18b20_get_temperature(void){
+ 146   1              float temp;
+ 147   1              unsigned char tempH=0;
+ 148   1              unsigned char tempL=0;
+ 149   1              unsigned short value=0;
+ 150   1      
+ 151   1              // 开始转换
+ 152   1              ds18b20_start();
+ 153   1              // 复位
+ 154   1              ds18b20_reset();
+ 155   1              // 等待DS18B20的响应
+ 156   1              ds18b20_ack();
+ 157   1              // 发送SKIP ROM命令
+ 158   1              ds18b20_write_byte(0xcc);
+ 159   1              // 发送读存储器命令
+ 160   1          ds18b20_write_byte(0xbe);
+ 161   1      
+ 162   1              // 读取温度值低字节
+ 163   1              tempL = ds18b20_read_byte();
+ 164   1              // 读取温度值高字节
+ 165   1              tempH = ds18b20_read_byte();
+ 166   1              // 计算温度值
+ 167   1              value = (tempH<<8) + tempL;
+ 168   1      
+ 169   1              // 温度值转换，负温度是补码
+ 170   1              if((value&0xf800)==0xf800)//判断符号位，负温度
+ 171   1              {
+ 172   2                      // 取反再加1
+ 173   2                      value=(~value)+1; 
+ 174   2                      temp=value*(-0.0625);
+ 175   2              }
+ 176   1              else 
+ 177   1              {
+ 178   2                      // 正温度
+C51 COMPILER V9.60.0.0   DS18B20                                                           06/24/2024 12:07:09 PAGE 4   
+
+ 179   2                      temp=value*0.0625;      
+ 180   2              }
+ 181   1              return temp;
+ 182   1      }
+ 183          
+ 184          
+ 185          
+ 186          
+ 187          
+ 188          
+ 189          
+ 190          
+ 191          
+ 192          
+ 193          
+ 194          
+ 195          
+ 196          
+ 197          
+ 198          
+ 199          
+ 200          
+ 201          
+ 202          
+ 203          
+ 204          
+ 205          
+ 206          
+ 207          
+ 208          
+ 209          
+ 210          
+ 211          
+ 212          
+ 213          
+ 214          /**
+ 215          * @brief  DS18B20初始化
+ 216          */
+ 217          void ds18b21_reset(void){
+ 218   1              // 拉低DQ
+ 219   1              DS18B21_PORT=0; 
+ 220   1              // 持续750us
+ 221   1              delay_10us(75);
+ 222   1              // 释放DQ
+ 223   1              DS18B21_PORT=1;
+ 224   1              // 等待20us
+ 225   1              delay_10us(2);
+ 226   1      }
+ 227          /**
+ 228          * @brief DS18B20响应信号，用来判断DS18B20是否存在
+ 229          * @return 0:成功 1:失败
+ 230          */
+ 231          unsigned char ds18b21_ack(void){
+ 232   1          unsigned char timeout = 0;
+ 233   1          // 读取响应信号，60us左右的低电平信号
+ 234   1          while(DS18B21_PORT && timeout <20){
+ 235   2              timeout ++;
+ 236   2              delay_10us(1);
+ 237   2          }
+ 238   1          if(timeout >= 20){
+ 239   2              // 超时了
+ 240   2              return 1;
+C51 COMPILER V9.60.0.0   DS18B20                                                           06/24/2024 12:07:09 PAGE 5   
+
+ 241   2          }else{
+ 242   2              timeout = 0;
+ 243   2          }
+ 244   1          // 释放引脚，引脚会被拉高，240us左右的高电平信号
+ 245   1                      while((!DS18B21_PORT)&&timeout<20)      //等待DQ为高电平
+ 246   1                      {
+ 247   2                              timeout++;
+ 248   2                              delay_10us(1);
+ 249   2                      }
+ 250   1          if(timeout >= 20){
+ 251   2              return 1;
+ 252   2          }
+ 253   1          return 0;
+ 254   1      }
+ 255          /**
+ 256          * @brief DS18B20初始化
+ 257          * @return 0:成功 1:失败
+ 258          */
+ 259          unsigned char ds18b21_init(void){
+ 260   1          ds18b21_reset();
+ 261   1          return ds18b21_ack();
+ 262   1      }
+ 263          /**
+ 264          * @brief DS18B20写一个字节
+ 265          * @return 写字节
+ 266          */
+ 267          void ds18b21_write_byte(unsigned char dat){
+ 268   1              unsigned char i=0;
+ 269   1              unsigned char temp=0;
+ 270   1      
+ 271   1              for(i=0;i<8;i++)//循环8次，每次写一位，且先写低位再写高位
+ 272   1              {
+ 273   2                      temp=dat&0x01;//选择低位准备写入
+ 274   2                      dat>>=1;//将次高位移到低位
+ 275   2                      if(temp)
+ 276   2                      {
+ 277   3                              DS18B21_PORT=0;
+ 278   3                              _nop_();_nop_();
+ 279   3                              DS18B21_PORT=1; 
+ 280   3                              delay_10us(6);
+ 281   3                      }
+ 282   2                      else
+ 283   2                      {
+ 284   3                              DS18B21_PORT=0;
+ 285   3                              delay_10us(6);
+ 286   3                              DS18B21_PORT=1;
+ 287   3                              _nop_();_nop_();        
+ 288   3                      }       
+ 289   2              }       
+ 290   1      }
+ 291          /**
+ 292          * @brief DS18B20读取一个bit
+ 293          * @return 读取到的bit
+ 294          */
+ 295          unsigned char ds18b21_read_bit(void){
+ 296   1              unsigned char dat=0;
+ 297   1              
+ 298   1              DS18B21_PORT=0;
+ 299   1              _nop_();_nop_();
+ 300   1              DS18B21_PORT=1; 
+ 301   1              _nop_();_nop_(); //该段时间不能过长，必须在15us内读取数据
+ 302   1              if(DS18B21_PORT)dat=1;  //如果总线上为1则数据dat为1，否则为0
+C51 COMPILER V9.60.0.0   DS18B20                                                           06/24/2024 12:07:09 PAGE 6   
+
+ 303   1              else dat=0;
+ 304   1              delay_10us(5);
+ 305   1              return dat;
+ 306   1      }
+ 307          /**
+ 308          * @brief DS18B20读取一个字节
+ 309          * @return 读取到的字节
+ 310          */
+ 311          unsigned char ds18b21_read_byte(void){
+ 312   1              unsigned char i=0;
+ 313   1              unsigned char dat=0;
+ 314   1              unsigned char temp=0;
+ 315   1      
+ 316   1              for(i=0;i<8;i++)//循环8次，每次读取一位，且先读低位再读高位
+ 317   1              {
+ 318   2                      temp=ds18b21_read_bit();
+ 319   2                      dat=(temp<<7)|(dat>>1);
+ 320   2              }
+ 321   1              return dat;     
+ 322   1      }
+ 323          /**
+ 324          * @brief DS18B20开始转换
+ 325          */
+ 326          void ds18b21_start(void){
+ 327   1          ds18b21_reset();
+ 328   1          ds18b21_ack();
+ 329   1          ds18b21_write_byte(0xcc);
+ 330   1          ds18b21_write_byte(0x44);
+ 331   1      }
+ 332          /**
+ 333          * @brief DS18B20读取温度
+ 334          * @return 温度值
+ 335          */
+ 336          float ds18b21_get_temperature(void){
+ 337   1              float temp;
+ 338   1              unsigned char tempH=0;
+ 339   1              unsigned char tempL=0;
+ 340   1              unsigned short value=0;
+ 341   1      
+ 342   1              // 开始转换
+ 343   1              ds18b21_start();
+ 344   1              // 复位
+ 345   1              ds18b21_reset();
+ 346   1              // 等待DS18B20的响应
+ 347   1              ds18b21_ack();
+ 348   1              // 发送SKIP ROM命令
+ 349   1              ds18b21_write_byte(0xcc);
+ 350   1              // 发送读存储器命令
+ 351   1          ds18b21_write_byte(0xbe);
+ 352   1      
+ 353   1              // 读取温度值低字节
+ 354   1              tempL = ds18b21_read_byte();
+ 355   1              // 读取温度值高字节
+ 356   1              tempH = ds18b21_read_byte();
+ 357   1              // 计算温度值
+ 358   1              value = (tempH<<8) + tempL;
+ 359   1      
+ 360   1              // 温度值转换，负温度是补码
+ 361   1              if((value&0xf800)==0xf800)//判断符号位，负温度
+ 362   1              {
+ 363   2                      // 取反再加1
+ 364   2                      value=(~value)+1; 
+C51 COMPILER V9.60.0.0   DS18B20                                                           06/24/2024 12:07:09 PAGE 7   
+
+ 365   2                      temp=value*(-0.0625);
+ 366   2              }
+ 367   1              else 
+ 368   1              {
+ 369   2                      // 正温度
+ 370   2                      temp=value*0.0625;      
+ 371   2              }
+ 372   1              return temp;
+ 373   1      }
+ 374          
+ 375          
+ 376          
+ 377          
+ 378          
+ 379          
+ 380          
+ 381          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    778    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      12
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

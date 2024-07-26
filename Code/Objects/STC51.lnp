@@ -1,0 +1,8 @@
+".\Objects\STARTUP.obj",
+".\Objects\main.obj",
+".\Objects\lcd.obj",
+".\Objects\uart.obj",
+".\Objects\ds18b20.obj",
+".\Objects\key.obj" 
+TO ".\Objects\STC51" 
+PRINT(".\Listings\STC51.m51") RAMSIZE(256) 
